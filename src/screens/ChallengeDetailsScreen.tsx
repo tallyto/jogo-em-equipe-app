@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, FlatList, Alert } from "react-native";
+import { StyleSheet, View, ScrollView, RefreshControl } from "react-native";
 import {
   Text,
   Button,
   useTheme,
-  List,
+  Card,
+  Surface,
+  Avatar,
+  Badge,
   ActivityIndicator,
 } from "react-native-paper";
 import * as SecureStore from "expo-secure-store";
@@ -19,7 +22,12 @@ interface Task {
   descricao: string;
   pontos: number;
   status: string;
-  // Outras propriedades da sua tarefa
+}
+
+interface Reward {
+  id: string;
+  nome: string;
+  custoPontos: number;
 }
 
 const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
@@ -29,136 +37,256 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   const { challenge } = route.params;
   const { colors } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [rewards, setRewards] = useState<Reward[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+  const [loadingRewards, setLoadingRewards] = useState(true);
   const [errorTasks, setErrorTasks] = useState<string | null>(null);
+  const [errorRewards, setErrorRewards] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const loadTasks = async () => {
+  const loadData = async () => {
     setLoadingTasks(true);
+    setLoadingRewards(true);
     setErrorTasks(null);
+    setErrorRewards(null);
+
     const token = await SecureStore.getItemAsync("userToken");
     if (!token) {
       setErrorTasks("Usuário não autenticado.");
+      setErrorRewards("Usuário não autenticado.");
       setLoadingTasks(false);
+      setLoadingRewards(false);
       return;
     }
 
     try {
-      const response = await fetch(
-        `http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+      const [tasksResponse, rewardsResponse] = await Promise.all([
+        fetch(`http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`http://10.0.2.2:3002/api/recompensas/${challenge.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
+      const tasksData = await tasksResponse.json();
+      const rewardsData = await rewardsResponse.json();
+
+      if (tasksResponse.ok) {
+        setTasks(tasksData);
       } else {
-        const errorData = await response.json();
-        setErrorTasks(errorData?.message || "Erro ao carregar tarefas.");
+        setErrorTasks(tasksData?.message || "Erro ao carregar tarefas.");
+      }
+
+      if (rewardsResponse.ok) {
+        setRewards(rewardsData);
+      } else {
+        setErrorRewards(rewardsData?.message || "Erro ao carregar recompensas.");
       }
     } catch (error: any) {
-      console.error("Erro ao carregar tarefas:", error);
+      console.error("Erro ao carregar dados:", error);
       setErrorTasks("Erro de conexão ao carregar tarefas.");
+      setErrorRewards("Erro de conexão ao carregar recompensas.");
     } finally {
       setLoadingTasks(false);
+      setLoadingRewards(false);
     }
   };
 
   useEffect(() => {
     if (challenge?.id) {
-      loadTasks();
+      loadData();
     }
   }, [challenge?.id]);
 
-  const renderTaskItem = ({ item }: { item: Task }) => (
-    <View style={styles.taskItem}>
-      <List.Item
-        title={item.descricao}
-        description={`Pontos: ${item.pontos} - Status: ${item.status.replace(
-          /_/g,
-          " "
-        )}`}
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
+
+  const renderTaskCard = (task: Task) => (
+    <Card
+      key={task.id}
+      style={styles.itemCard}
+      onPress={() => {/* Optional: Navigate to task details */}}
+    >
+      <Card.Title
+        title={task.descricao}
         left={(props) => (
-          <List.Icon
+          <Avatar.Icon
             {...props}
-            icon="check-circle-outline"
-            color={colors.primary}
+            icon={task.status === "CONCLUIDA" ? "check-circle" : "circle-outline"}
+            style={{ 
+              backgroundColor: 
+                task.status === "CONCLUIDA" ? colors.primary : colors.disabled 
+            }}
           />
         )}
+        right={(props) => (
+          <View style={styles.cardRightContent}>
+            <Text {...props} style={{ color: colors.secondary, marginRight: 8 }}>
+              {task.pontos} pts
+            </Text>
+            {task.status === "PENDENTE" && (
+              <Badge style={{ backgroundColor: colors.accent }}>
+                Pendente
+              </Badge>
+            )}
+          </View>
+        )}
       />
-    </View>
+    </Card>
+  );
+
+  const renderRewardCard = (reward: Reward) => (
+    <Card
+      key={reward.id}
+      style={styles.itemCard}
+      onPress={() => {/* Optional: Navigate to reward details */}}
+    >
+      <Card.Title
+        title={reward.nome}
+        left={(props) => (
+          <Avatar.Icon
+            {...props}
+            icon="gift"
+            style={{ backgroundColor: colors.primary }}
+          />
+        )}
+        right={(props) => (
+          <Text {...props} style={{ color: colors.secondary }}>
+            {reward.custoPontos} pts
+          </Text>
+        )}
+      />
+    </Card>
   );
 
   if (!challenge) {
-    return <Text style={styles.notFoundText}>Desafio não encontrado!</Text>;
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={{ color: colors.error }}>Desafio não encontrado!</Text>
+      </View>
+    );
   }
-
-  const handleCreateTask = () => {
-    navigation.navigate("CreateTask", { challengeId: challenge.id });
-  };
-
-  const handleCreateReward = () => {
-    navigation.navigate("CreateReward", { challengeId: challenge.id });
-  };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text variant="headlineLarge" style={styles.title}>
-          {challenge.nome}
-        </Text>
-        <Text style={styles.description}>{challenge.descricao}</Text>
-      </View>
-
-      <View style={styles.buttonContainer}>
-        <Button
-          mode="contained"
-          onPress={handleCreateTask}
-          style={[styles.button, { backgroundColor: colors.primary }]}
-          labelStyle={styles.buttonLabel}
-        >
-          Criar Tarefa
-        </Button>
-        <Button
-          mode="contained"
-          onPress={handleCreateReward}
-          style={[
-            styles.button,
-            { backgroundColor: colors.secondaryContainer },
-          ]}
-          labelStyle={[
-            styles.buttonLabel,
-            { color: colors.onSecondaryContainer },
-          ]}
-        >
-          Criar Recompensa
-        </Button>
-      </View>
-
-      <View style={styles.tasksSection}>
-        <Text variant="titleLarge" style={styles.tasksTitle}>
-          Tarefas
-        </Text>
-        {loadingTasks ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-          </View>
-        ) : errorTasks ? (
-          <Text style={styles.errorText}>{errorTasks}</Text>
-        ) : tasks.length > 0 ? (
-          <FlatList
-            data={tasks}
-            renderItem={renderTaskItem}
-            keyExtractor={(item) => item.id}
+      <ScrollView
+        style={{ backgroundColor: colors.background }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
           />
-        ) : (
-          <Text style={styles.emptyTasksText}>
-            Nenhuma tarefa criada para este desafio ainda.
+        }
+        contentContainerStyle={styles.scrollContent}
+      >
+        <Surface style={styles.header} elevation={1}>
+          <View style={styles.headerContent}>
+            <Avatar.Icon
+              size={60}
+              icon="trophy"
+              style={{ 
+                backgroundColor: 
+                  challenge.status === 'completed' ? colors.primary : 
+                  challenge.status === 'pending' ? colors.disabled : 
+                  colors.accent
+              }}
+            />
+            <View>
+              <Text variant="headlineSmall">{challenge.nome}</Text>
+              <Text variant="bodyMedium" style={{ color: colors.secondary }}>
+                {challenge.descricao}
+              </Text>
+            </View>
+          </View>
+        </Surface>
+
+        <View style={styles.section}>
+          <Text variant="titleLarge" style={styles.sectionTitle}>
+            Tarefas
           </Text>
-        )}
+
+          {loadingTasks ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : errorTasks ? (
+            <View style={styles.errorContainer}>
+              <Text style={{ color: colors.error }}>{errorTasks}</Text>
+              <Button mode="contained" onPress={loadData}>
+                Tentar Novamente
+              </Button>
+            </View>
+          ) : tasks.length > 0 ? (
+            <View style={styles.itemList}>
+              {tasks.map(renderTaskCard)}
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
+                Nenhuma tarefa criada ainda.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text variant="titleLarge" style={styles.sectionTitle}>
+            Recompensas
+          </Text>
+
+          {loadingRewards ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : errorRewards ? (
+            <View style={styles.errorContainer}>
+              <Text style={{ color: colors.error }}>{errorRewards}</Text>
+              <Button mode="contained" onPress={loadData}>
+                Tentar Novamente
+              </Button>
+            </View>
+          ) : rewards.length > 0 ? (
+            <View style={styles.itemList}>
+              {rewards.map(renderRewardCard)}
+            </View>
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
+                Nenhuma recompensa criada ainda.
+              </Text>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      <View style={styles.bottomButtons}>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('CreateTask', {
+            challengeName: challenge.nome,
+            challengeId: challenge.id,
+          })}
+          style={styles.actionButton}
+          icon="plus"
+        >
+          Nova Tarefa
+        </Button>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate('CreateReward', {
+            challengeName: challenge.nome,
+            challengeId: challenge.id,
+          })}
+          style={styles.actionButton}
+          icon="gift"
+        >
+          Nova Recompensa
+        </Button>
       </View>
     </View>
   );
@@ -167,77 +295,67 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f4f6f8",
-    justifyContent: "space-between", // Ajustado para melhor espaçamento
+  },
+  scrollContent: {
+    paddingBottom: 70,
   },
   header: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  title: {
-    textAlign: "center",
-    color: "#333",
-    marginBottom: 10,
-  },
-  description: {
-    marginTop: 10,
-    marginBottom: 20,
-    textAlign: "center",
-    color: "#555",
-    fontSize: 16,
-  },
-  buttonContainer: {
-    alignItems: "center",
-    marginBottom: 30,
-  },
-  button: {
-    marginTop: 16,
-    width: "90%",
-    borderRadius: 8,
-  },
-  buttonLabel: {
-    fontSize: 16,
-  },
-  notFoundText: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    textAlign: "center",
-    fontSize: 18,
-    color: "red",
-  },
-  tasksSection: {
-    flex: 1, // Para que a lista de tarefas possa ocupar o espaço restante
-    marginTop: 20,
-  },
-  tasksTitle: {
+    padding: 16,
     marginBottom: 16,
-    color: "#333",
-    fontWeight: "bold",
-    textAlign: "center",
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  section: {
+    padding: 16,
+  },
+  sectionTitle: {
+    marginBottom: 16,
+  },
+  itemList: {
+    gap: 12,
+  },
+  itemCard: {
+    marginBottom: 12,
   },
   loadingContainer: {
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
   },
-  errorText: {
-    color: "red",
-    textAlign: "center",
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    gap: 12,
   },
-  emptyTasksText: {
-    color: "#777",
-    textAlign: "center",
+  emptyStateContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
   },
-  taskItem: {
-    backgroundColor: "white",
+  bottomButtons: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'white',
+    padding: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    borderTopWidth: 1,
+    borderTopColor: '#ccc',
+  },
+  actionButton: {
+    flex: 1,
+    marginHorizontal: 8,
     borderRadius: 8,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+  },
+  cardRightContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 });
 
