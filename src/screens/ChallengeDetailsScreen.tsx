@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { StyleSheet, View, ScrollView, RefreshControl } from "react-native";
+import {
+  StyleSheet,
+  View,
+  ScrollView,
+  RefreshControl,
+  Alert,
+} from "react-native";
 import {
   Text,
   Button,
@@ -11,6 +17,7 @@ import {
   ActivityIndicator,
 } from "react-native-paper";
 import * as SecureStore from "expo-secure-store";
+import axios from 'axios';
 
 interface ChallengeDetailsScreenProps {
   route: any;
@@ -29,6 +36,7 @@ interface Reward {
   id: string;
   nome: string;
   custoPontos: number;
+  resgatada: boolean;
 }
 
 const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
@@ -44,6 +52,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   const [errorTasks, setErrorTasks] = useState<string | null>(null);
   const [errorRewards, setErrorRewards] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
 
   const loadData = async () => {
     setLoadingTasks(true);
@@ -62,26 +71,24 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
 
     try {
       const [tasksResponse, rewardsResponse] = await Promise.all([
-        fetch(`http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`, {
+        axios.get(`http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        fetch(`http://10.0.2.2:3002/api/recompensas/${challenge.id}`, {
+        axios.get(`http://10.0.2.2:3002/api/recompensas/${challenge.id}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
 
-      const tasksData = await tasksResponse.json();
-      const rewardsData = await rewardsResponse.json();
-      if (tasksResponse.ok) {
-        setTasks(tasksData);
+      if (tasksResponse.status === 200) {
+        setTasks(tasksResponse.data);
       } else {
-        setErrorTasks(tasksData?.message || "Erro ao carregar tarefas.");
+        setErrorTasks(tasksResponse.data?.message || "Erro ao carregar tarefas.");
       }
 
-      if (rewardsResponse.ok) {
-        setRewards(rewardsData);
+      if (rewardsResponse.status === 200) {
+        setRewards(rewardsResponse.data);
       } else {
-        setErrorRewards(rewardsData?.message || "Erro ao carregar recompensas.");
+        setErrorRewards(rewardsResponse.data?.message || "Erro ao carregar recompensas.");
       }
     } catch (error: any) {
       console.error("Erro ao carregar dados:", error);
@@ -119,19 +126,17 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
     );
 
     try {
-      const response = await fetch(
-        `http://10.0.2.2:3002/api/tarefas/${taskId}/concluir`, // Adapte sua rota da API
+      const response = await axios.put(
+        `http://10.0.2.2:3002/api/tarefas/${taskId}/concluir`,
+        {},
         {
-          method: "PUT",
           headers: {
             Authorization: `Bearer ${token}`,
           },
         }
       );
 
-      const data = await response.json();
-
-      if (response.ok) {
+      if (response.status === 200) {
         setTasks(prevTasks =>
           prevTasks.map(task =>
             task.id === taskId ? { ...task, status: "CONCLUIDA", resgatada: false } : task
@@ -139,13 +144,13 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
         );
         // Opcional: Recarregar os dados do usuário para atualizar os pontos
       } else {
-        console.error("Erro ao resgatar tarefa:", data?.message || "Erro desconhecido");
+        console.error("Erro ao resgatar tarefa:", response.data?.message || "Erro desconhecido");
         setTasks(prevTasks =>
           prevTasks.map(task =>
             task.id === taskId ? { ...task, resgatada: false } : task
           )
         );
-        // Exibir uma mensagem de erro para o usuário
+        Alert.alert("Erro", response.data?.message || "Erro ao resgatar tarefa.");
       }
     } catch (error: any) {
       console.error("Erro ao conectar para resgatar tarefa:", error);
@@ -154,15 +159,71 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
           task.id === taskId ? { ...task, resgatada: false } : task
         )
       );
-      // Exibir uma mensagem de erro de conexão para o usuário
+      Alert.alert("Erro de Conexão", "Não foi possível resgatar a tarefa.");
+    }
+  };
+
+  const rescueReward = async (rewardId: string) => {
+    const token = await SecureStore.getItemAsync("userToken");
+    if (!token) {
+      console.error("Usuário não autenticado.");
+      return;
+    }
+
+    setRewards(prevRewards =>
+      prevRewards.map(reward =>
+        reward.id === rewardId ? { ...reward, resgatada: true } : reward
+      )
+    );
+
+    try {
+      const response = await axios.put(
+        `http://10.0.2.2:3002/api/recompensas/${rewardId}/resgatar`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.status === 200) {
+        setRewards(prevRewards =>
+          prevRewards.map(reward =>
+            reward.id === rewardId ? { ...reward, resgatada: true } : reward
+          )
+        );
+        Alert.alert("Sucesso", "Recompensa resgatada com sucesso!");
+        loadData(); // Recarrega para atualizar a lista
+      } else if (response.status === 400) {
+        Alert.alert("Erro", response.data?.message || "Não foi possível resgatar a recompensa.");
+        setRewards(prevRewards =>
+          prevRewards.map(reward =>
+            reward.id === rewardId ? { ...reward, resgatada: false } : reward
+          )
+        );
+      } else {
+        console.error("Erro ao resgatar recompensa:", response.data?.message || "Erro desconhecido");
+        Alert.alert("Erro", "Erro ao resgatar recompensa.");
+        setRewards(prevRewards =>
+          prevRewards.map(reward =>
+            reward.id === rewardId ? { ...reward, resgatada: false } : reward
+          )
+        );
+      }
+    } catch (error: any) {
+      console.error("Erro ao conectar para resgatar recompensa:", error);
+      Alert.alert("Erro de Conexão", "Não foi possível resgatar a recompensa.");
+      setRewards(prevRewards =>
+        prevRewards.map(reward =>
+          reward.id === rewardId ? { ...reward, resgatada: false } : reward
+        )
+      );
     }
   };
 
   const renderTaskCard = (task: Task) => (
-    <Card
-      key={task.id}
-      style={styles.itemCard}
-    >
+    <Card key={task.id} style={styles.itemCard}>
       <Card.Title
         title={task.descricao}
         left={(props) => (
@@ -171,7 +232,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             icon={task.status === "CONCLUIDA" ? "check-circle" : "circle-outline"}
             style={{
               backgroundColor:
-                task.status === "CONCLUIDA" ? colors.primary : colors.secondary
+                task.status === "CONCLUIDA" ? colors.primary : colors.secondary,
             }}
           />
         )}
@@ -205,11 +266,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   );
 
   const renderRewardCard = (reward: Reward) => (
-    <Card
-      key={reward.id}
-      style={styles.itemCard}
-      onPress={() => {/* Optional: Navigate to reward details */}}
-    >
+    <Card key={reward.id} style={styles.itemCard}>
       <Card.Title
         title={reward.nome}
         left={(props) => (
@@ -220,9 +277,26 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
           />
         )}
         right={(props) => (
-          <Text {...props} style={{ color: colors.secondary }}>
-            {reward.custoPontos} pts
-          </Text>
+          <View style={styles.cardRightContent}>
+            <Text {...props} style={{ color: colors.secondary }}>
+              {reward.custoPontos} pts
+            </Text>
+            {reward.resgatada ? (
+              <Badge style={{ backgroundColor: colors.primary }}>
+                Resgatada
+              </Badge>
+            ) : (
+              <Button
+                mode="contained"
+                onPress={() => rescueReward(reward.id)}
+                style={styles.rescueButton}
+                loading={reward.resgatada}
+                disabled={reward.resgatada}
+              >
+                Resgatar
+              </Button>
+            )}
+          </View>
         )}
       />
     </Card>
@@ -256,9 +330,11 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
               icon="trophy"
               style={{
                 backgroundColor:
-                  challenge.status === 'completed' ? colors.primary :
-                  challenge.status === 'pending' ? colors.disabled :
-                  colors.accent
+                  challenge.status === "completed"
+                    ? colors.primary
+                    : challenge.status === "pending"
+                    ? colors.secondary
+                    : colors.primary,
               }}
             />
             <View>
@@ -292,7 +368,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             </View>
           ) : (
             <View style={styles.emptyStateContainer}>
-              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
+              <Text variant="bodyLarge" style={{ textAlign: "center" }}>
                 Nenhuma tarefa criada ainda.
               </Text>
             </View>
@@ -321,7 +397,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             </View>
           ) : (
             <View style={styles.emptyStateContainer}>
-              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
+              <Text variant="bodyLarge" style={{ textAlign: "center" }}>
                 Nenhuma recompensa criada ainda.
               </Text>
             </View>
@@ -332,10 +408,12 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
       <View style={styles.bottomButtons}>
         <Button
           mode="contained"
-          onPress={() => navigation.navigate('CreateTask', {
-            challengeName: challenge.nome,
-            challengeId: challenge.id,
-          })}
+          onPress={() =>
+            navigation.navigate("CreateTask", {
+              challengeName: challenge.nome,
+              challengeId: challenge.id,
+            })
+          }
           style={styles.actionButton}
           icon="plus"
         >
@@ -343,10 +421,12 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
         </Button>
         <Button
           mode="contained"
-          onPress={() => navigation.navigate('CreateReward', {
-            challengeName: challenge.nome,
-            challengeId: challenge.id,
-          })}
+          onPress={() =>
+            navigation.navigate("CreateReward", {
+              challengeName: challenge.nome,
+              challengeId: challenge.id,
+            })
+          }
           style={styles.actionButton}
           icon="gift"
         >
@@ -369,8 +449,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
   section: {
@@ -386,32 +466,32 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
   },
   errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
     gap: 12,
   },
   emptyStateContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     padding: 20,
   },
   bottomButtons: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'white',
+    backgroundColor: "white",
     padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
+    flexDirection: "row",
+    justifyContent: "space-around",
     borderTopWidth: 1,
-    borderTopColor: '#ccc',
+    borderTopColor: "#ccc",
   },
   actionButton: {
     flex: 1,
@@ -419,8 +499,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   cardRightContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
   },
   rescueButton: {
     marginHorizontal: 4,
