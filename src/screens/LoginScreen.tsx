@@ -1,7 +1,8 @@
 import React, { useState, useContext, useCallback } from 'react';
-import { StyleSheet, View, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { StyleSheet, View, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { AuthContext } from '../context/AuthContext';
+import { useSnackbar } from '../context/SnackbarContext'; // Importe o hook do contexto
 import * as yup from 'yup';
 
 // Validation schema
@@ -18,6 +19,7 @@ const loginSchema = yup.object().shape({
 
 const LoginScreen = ({ navigation }: any) => {
   const { login } = useContext(AuthContext);
+  const { showSnackbar } = useSnackbar(); // Utilize o hook para acessar showSnackbar
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -45,7 +47,7 @@ const LoginScreen = ({ navigation }: any) => {
 
   const handleLogin = async () => {
     const isValid = await validateForm();
-    
+
     if (!isValid) return;
 
     setIsLoading(true);
@@ -66,68 +68,61 @@ const LoginScreen = ({ navigation }: any) => {
         throw new Error(errorData.message || 'Credenciais inválidas');
       }
     } catch (error) {
-      console.error(error);
       const errorMessage = error instanceof Error ? error.message : 'Erro na comunicação com o servidor!';
-      
-      // Use a more robust error handling method
-      Alert.alert(
-        'Erro de Login', 
-        errorMessage, 
-        [{ text: 'OK', style: 'cancel' }]
-      );
+      showSnackbar(errorMessage, 'error'); // Use o snackbar global
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.innerContainer}>
         <Text variant="headlineMedium" style={styles.title}>Login</Text>
-        
-        <TextInput 
-          label="Email" 
-          value={email} 
-          onChangeText={setEmail} 
-          style={styles.input} 
+
+        <TextInput
+          label="Email"
+          value={email}
+          onChangeText={setEmail}
+          style={styles.input}
           keyboardType="email-address"
           error={!!errors.email}
         />
         {errors.email && <HelperText type="error" visible={!!errors.email}>{errors.email}</HelperText>}
-        
-        <TextInput 
-          label="Senha" 
-          value={password} 
-          onChangeText={setPassword} 
-          style={styles.input} 
+
+        <TextInput
+          label="Senha"
+          value={password}
+          onChangeText={setPassword}
+          style={styles.input}
           secureTextEntry={!showPassword}
           error={!!errors.password}
           right={
-            <TextInput.Icon 
-              icon={showPassword ? 'eye-off' : 'eye'} 
-              onPress={() => setShowPassword(!showPassword)} 
+            <TextInput.Icon
+              icon={showPassword ? 'eye-off' : 'eye'}
+              onPress={() => setShowPassword(!showPassword)}
             />
           }
         />
         {errors.password && <HelperText type="error" visible={!!errors.password}>{errors.password}</HelperText>}
-        
-        <Button 
-          mode="contained" 
-          onPress={handleLogin} 
+
+        <Button
+          mode="contained"
+          onPress={handleLogin}
           style={styles.button}
           loading={isLoading}
           disabled={isLoading}
         >
           {isLoading ? 'Conectando...' : 'Login'}
         </Button>
-        
+
         <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
           <Text style={styles.forgotPassword}>Esqueceu sua senha?</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
           <Text style={styles.signup}>
             Não tem uma conta? Cadastre-se

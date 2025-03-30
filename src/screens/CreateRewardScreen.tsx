@@ -2,13 +2,14 @@ import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
-    ActivityIndicator,
-    Button,
-    Card,
-    Text,
-    TextInput,
-    useTheme,
+  ActivityIndicator,
+  Button,
+  Card,
+  Text,
+  TextInput,
+  useTheme,
 } from "react-native-paper";
+import { useSnackbar } from "../context/SnackbarContext"; // Importe o hook do contexto
 
 interface CreateRewardScreenProps {
   route: any;
@@ -18,6 +19,7 @@ interface CreateRewardScreenProps {
 const CreateRewardScreen: React.FC<CreateRewardScreenProps> = ({ route, navigation }) => {
   const { challengeId, challengeName } = route.params;
   const { colors } = useTheme();
+  const { showSnackbar } = useSnackbar(); // Utilize o hook para acessar showSnackbar
   const [nome, setNome] = useState<string>("");
   const [custoPontos, setCustoPontos] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -55,7 +57,7 @@ const CreateRewardScreen: React.FC<CreateRewardScreenProps> = ({ route, navigati
 
     const token = await SecureStore.getItemAsync("userToken");
     if (!token) {
-      alert("Não autenticado");
+      showSnackbar("Não autenticado", "error"); // Use o snackbar global
       setLoading(false);
       return;
     }
@@ -75,15 +77,15 @@ const CreateRewardScreen: React.FC<CreateRewardScreenProps> = ({ route, navigati
       });
 
       if (response.ok) {
-        alert("Recompensa criada!");
+        showSnackbar("Recompensa criada com sucesso!", "success"); // Use o snackbar global
         navigation.goBack();
       } else {
         const errorData = await response.json();
-        alert(`Erro ao criar recompensa: ${errorData?.message || "Verifique os dados."}`);
+        showSnackbar(`Erro ao criar recompensa: ${errorData?.message || "Verifique os dados."}`, "error"); // Use o snackbar global
       }
     } catch (error: any) {
       console.error("Erro ao criar recompensa:", error);
-      alert("Erro de conexão ao criar recompensa.");
+      showSnackbar("Erro de conexão ao criar recompensa.", "error"); // Use o snackbar global
     } finally {
       setLoading(false);
     }
