@@ -22,6 +22,7 @@ interface Task {
   descricao: string;
   pontos: number;
   status: string;
+  resgatada: boolean;
 }
 
 interface Reward {
@@ -71,7 +72,6 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
 
       const tasksData = await tasksResponse.json();
       const rewardsData = await rewardsResponse.json();
-
       if (tasksResponse.ok) {
         setTasks(tasksData);
       } else {
@@ -105,11 +105,63 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
     setRefreshing(false);
   };
 
+  const rescueTask = async (taskId: string) => {
+    const token = await SecureStore.getItemAsync("userToken");
+    if (!token) {
+      console.error("Usuário não autenticado.");
+      return;
+    }
+
+    setTasks(prevTasks =>
+      prevTasks.map(task =>
+        task.id === taskId ? { ...task, resgatada: true } : task
+      )
+    );
+
+    try {
+      const response = await fetch(
+        `http://10.0.2.2:3002/api/tarefas/${taskId}/concluir`, // Adapte sua rota da API
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setTasks(prevTasks =>
+          prevTasks.map(task =>
+            task.id === taskId ? { ...task, status: "CONCLUIDA", resgatada: false } : task
+          )
+        );
+        // Opcional: Recarregar os dados do usuário para atualizar os pontos
+      } else {
+        console.error("Erro ao resgatar tarefa:", data?.message || "Erro desconhecido");
+        setTasks(prevTasks =>
+          prevTasks.map(task =>
+            task.id === taskId ? { ...task, resgatada: false } : task
+          )
+        );
+        // Exibir uma mensagem de erro para o usuário
+      }
+    } catch (error: any) {
+      console.error("Erro ao conectar para resgatar tarefa:", error);
+      setTasks(prevTasks =>
+        prevTasks.map(task =>
+          task.id === taskId ? { ...task, resgatada: false } : task
+        )
+      );
+      // Exibir uma mensagem de erro de conexão para o usuário
+    }
+  };
+
   const renderTaskCard = (task: Task) => (
     <Card
       key={task.id}
       style={styles.itemCard}
-      onPress={() => {/* Optional: Navigate to task details */}}
     >
       <Card.Title
         title={task.descricao}
@@ -117,20 +169,33 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
           <Avatar.Icon
             {...props}
             icon={task.status === "CONCLUIDA" ? "check-circle" : "circle-outline"}
-            style={{ 
-              backgroundColor: 
-                task.status === "CONCLUIDA" ? colors.primary : colors.disabled 
+            style={{
+              backgroundColor:
+                task.status === "CONCLUIDA" ? colors.primary : colors.secondary
             }}
           />
         )}
         right={(props) => (
           <View style={styles.cardRightContent}>
-            <Text {...props} style={{ color: colors.secondary, marginRight: 8 }}>
+            <Text {...props} style={{ color: colors.secondary, marginRight: 4 }}>
               {task.pontos} pts
             </Text>
             {task.status === "PENDENTE" && (
-              <Badge style={{ backgroundColor: colors.accent }}>
-                Pendente
+              task.resgatada ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Button
+                  mode="contained"
+                  onPress={() => rescueTask(task.id)}
+                  style={styles.rescueButton}
+                >
+                  Resgatar
+                </Button>
+              )
+            )}
+            {task.status === "CONCLUIDA" && (
+              <Badge style={{ backgroundColor: colors.primary }}>
+                Concluída
               </Badge>
             )}
           </View>
@@ -189,10 +254,10 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <Avatar.Icon
               size={60}
               icon="trophy"
-              style={{ 
-                backgroundColor: 
-                  challenge.status === 'completed' ? colors.primary : 
-                  challenge.status === 'pending' ? colors.disabled : 
+              style={{
+                backgroundColor:
+                  challenge.status === 'completed' ? colors.primary :
+                  challenge.status === 'pending' ? colors.disabled :
                   colors.accent
               }}
             />
@@ -356,6 +421,10 @@ const styles = StyleSheet.create({
   cardRightContent: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  rescueButton: {
+    marginHorizontal: 4,
+    backgroundColor: '#6200ee', // Use a cor primária do seu tema
   },
 });
 
