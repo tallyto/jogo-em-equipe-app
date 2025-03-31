@@ -1,10 +1,11 @@
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
-import React, { useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { StyleSheet, View } from "react-native";
 import { Avatar, Surface, Text, useTheme } from "react-native-paper";
 import { useSnackbar } from "../context/SnackbarContext";
-import TaskList from "./TaskList"; // Ajuste o caminho conforme necessário
-import RewardList from "./RewardList"; // Ajuste o caminho conforme necessário
+import TaskList from "./TaskList";
+import RewardList from "./RewardList";
+import useFetchData from "../hooks/useFetchData"; // Certifique-se que o caminho está correto
 
 interface ChallengeDetailsScreenProps {
   route: any;
@@ -20,11 +21,40 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   const { challenge } = route.params;
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
+  const [userPoints, setUserPoints] = useState<number | null>(null);
+  const API_BASE_URL = 'http://10.0.2.2:3002'; // Substitua pelo seu IP e porta
 
-  const handleLoadData = useCallback(() => {
-    // Se precisarmos recarregar dados na tela de detalhes (além das abas),
-    // a lógica ficaria aqui. Por enquanto, as abas carregam seus próprios dados.
-  }, []);
+  const {
+    data: fetchedPoints,
+    loading: loadingPoints,
+    error: errorPoints,
+    fetchData: fetchUserPointsData,
+  } = useFetchData<number>();
+
+  const fetchUserPoints = useCallback(async () => {
+    if (challenge?.id) {
+      fetchUserPointsData(`${API_BASE_URL}/api/pontos-usuario/${challenge.id}`);
+    }
+  }, [challenge?.id, fetchUserPointsData, API_BASE_URL]);
+
+  useEffect(() => {
+    fetchUserPoints();
+  }, [fetchUserPoints]);
+
+  useEffect(() => {
+    if (fetchedPoints !== undefined) {
+      setUserPoints(fetchedPoints);
+    } else if (errorPoints) {
+      console.error('Erro ao buscar pontos do usuário:', errorPoints);
+      showSnackbar('Erro ao carregar seus pontos.', 'error');
+      setUserPoints(null);
+    }
+  }, [fetchedPoints, errorPoints, showSnackbar]);
+
+  const onRewardRescued = useCallback(() => {
+    fetchUserPoints();
+  }, [fetchUserPoints]);
+
 
   if (!challenge) {
     return (
@@ -55,6 +85,21 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <Text variant="bodyMedium" style={{ color: colors.secondary }}>
               {challenge.descricao}
             </Text>
+            {loadingPoints && (
+              <Text variant="bodyMedium" style={{ color: colors.secondary }}>
+                Carregando seus pontos...
+              </Text>
+            )}
+            {!loadingPoints && userPoints !== null && (
+              <Text variant="bodyMedium" style={{ color: colors.primary }}>
+                Seus pontos: {userPoints}
+              </Text>
+            )}
+            {!loadingPoints && userPoints === null && errorPoints && (
+              <Text variant="bodyMedium" style={{ color: colors.error }}>
+                Erro ao carregar pontos.
+              </Text>
+            )}
           </View>
         </View>
       </Surface>
@@ -71,6 +116,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <TaskList
               challenge={challenge}
               showSnackbar={showSnackbar}
+              onRewardRescued={onRewardRescued} 
             />
           )}
         </Tab.Screen>
@@ -79,7 +125,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <RewardList
               challenge={challenge}
               showSnackbar={showSnackbar}
-              loadData={handleLoadData} // Passamos a função (vazia por enquanto)
+              onRewardRescued={onRewardRescued} // Passamos a função (vazia por enquanto)
             />
           )}
         </Tab.Screen>

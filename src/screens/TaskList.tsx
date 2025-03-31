@@ -17,6 +17,7 @@ import useFetchData from "../hooks/useFetchData";
 interface TaskListProps {
   challenge: any;
   showSnackbar: (message: string, type: "success" | "error") => void;
+  onRewardRescued: () => void; // Recebe a função de callback
 }
 
 interface Task {
@@ -27,7 +28,11 @@ interface Task {
   resgatada: boolean;
 }
 
-const TaskList: React.FC<TaskListProps> = ({ challenge, showSnackbar }) => {
+const TaskList: React.FC<TaskListProps> = ({
+  challenge,
+  showSnackbar,
+  onRewardRescued,
+}) => {
   const { colors } = useTheme();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,7 +95,7 @@ const TaskList: React.FC<TaskListProps> = ({ challenge, showSnackbar }) => {
         );
         showSnackbar("Tarefa concluída com sucesso!", "success");
         loadTasks(); // <---- RECARREGAR A LISTA AQUI
-        // Opcional: Recarregar os dados do usuário para atualizar os pontos
+        onRewardRescued();
       } else {
         setTasks((prevTasks) =>
           prevTasks.map((task) =>
@@ -100,7 +105,7 @@ const TaskList: React.FC<TaskListProps> = ({ challenge, showSnackbar }) => {
         showSnackbar(errorTasks || "Erro ao resgatar tarefa.", "error");
       }
     },
-    [fetchData, showSnackbar, errorTasks, loadTasks] // Adicione loadTasks como dependência
+    [fetchData, showSnackbar, errorTasks, loadTasks, onRewardRescued] // Adicione loadTasks como dependência
   );
 
   const renderTaskCard = useCallback(

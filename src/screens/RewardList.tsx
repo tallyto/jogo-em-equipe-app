@@ -17,7 +17,7 @@ import useFetchData from "../hooks/useFetchData";
 interface RewardListProps {
   challenge: any;
   showSnackbar: (message: string, type: "success" | "error") => void;
-  loadData: () => void; // Manter por enquanto, veremos se ainda é necessário
+  onRewardRescued: () => void; // Recebe a função de callback
 }
 
 interface Reward {
@@ -30,7 +30,7 @@ interface Reward {
 const RewardList: React.FC<RewardListProps> = ({
   challenge,
   showSnackbar,
-  loadData,
+  onRewardRescued, // Recebe a função de callback
 }) => {
   const { colors } = useTheme();
   const [rewards, setRewards] = useState<Reward[]>([]);
@@ -92,6 +92,7 @@ const RewardList: React.FC<RewardListProps> = ({
         );
         showSnackbar("Recompensa resgatada com sucesso!", "success");
         loadRewards(); // <---- RECARREGAR A LISTA AQUI
+        onRewardRescued();
       } else {
         showSnackbar(
           errorRewards || "Não foi possível resgatar a recompensa.",
@@ -104,7 +105,7 @@ const RewardList: React.FC<RewardListProps> = ({
         );
       }
     },
-    [fetchData, showSnackbar, errorRewards, loadRewards] // Adicione loadRewards como dependência
+    [fetchData, showSnackbar, errorRewards, loadRewards, onRewardRescued] // Adicione loadRewards como dependência
   );
 
   const renderRewardCard = useCallback(
