@@ -1,35 +1,18 @@
-import React, { useState, useEffect } from "react";
-import { StyleSheet, View, ScrollView, RefreshControl } from "react-native";
-import {
-  Text,
-  Button,
-  useTheme,
-  Card,
-  Surface,
-  Avatar,
-  Badge,
-  ActivityIndicator,
-} from "react-native-paper";
-import * as SecureStore from "expo-secure-store";
+import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
+import React, { useState, useEffect, useCallback } from "react";
+import { StyleSheet, View } from "react-native";
+import { Avatar, Surface, Text, useTheme } from "react-native-paper";
+import { useSnackbar } from "../context/SnackbarContext";
+import TaskList from "./TaskList";
+import RewardList from "./RewardList";
+import useFetchData from "../hooks/useFetchData"; // Certifique-se que o caminho está correto
 
 interface ChallengeDetailsScreenProps {
   route: any;
   navigation: any;
 }
 
-interface Task {
-  id: string;
-  descricao: string;
-  pontos: number;
-  status: string;
-  resgatada: boolean;
-}
-
-interface Reward {
-  id: string;
-  nome: string;
-  custoPontos: number;
-}
+const Tab = createMaterialTopTabNavigator();
 
 const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   route,
@@ -37,196 +20,41 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
 }) => {
   const { challenge } = route.params;
   const { colors } = useTheme();
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(true);
-  const [loadingRewards, setLoadingRewards] = useState(true);
-  const [errorTasks, setErrorTasks] = useState<string | null>(null);
-  const [errorRewards, setErrorRewards] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const { showSnackbar } = useSnackbar();
+  const [userPoints, setUserPoints] = useState<number | null>(null);
+  const API_BASE_URL = 'http://10.0.2.2:3002'; // Substitua pelo seu IP e porta
 
-  const loadData = async () => {
-    setLoadingTasks(true);
-    setLoadingRewards(true);
-    setErrorTasks(null);
-    setErrorRewards(null);
+  const {
+    data: fetchedPoints,
+    loading: loadingPoints,
+    error: errorPoints,
+    fetchData: fetchUserPointsData,
+  } = useFetchData<number>();
 
-    const token = await SecureStore.getItemAsync("userToken");
-    if (!token) {
-      setErrorTasks("Usuário não autenticado.");
-      setErrorRewards("Usuário não autenticado.");
-      setLoadingTasks(false);
-      setLoadingRewards(false);
-      return;
+  const fetchUserPoints = useCallback(async () => {
+    if (challenge?.id) {
+      fetchUserPointsData(`${API_BASE_URL}/api/pontos-usuario/${challenge.id}`);
     }
-
-    try {
-      const [tasksResponse, rewardsResponse] = await Promise.all([
-        fetch(`http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`http://10.0.2.2:3002/api/recompensas/${challenge.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
-
-      const tasksData = await tasksResponse.json();
-      const rewardsData = await rewardsResponse.json();
-      if (tasksResponse.ok) {
-        setTasks(tasksData);
-      } else {
-        setErrorTasks(tasksData?.message || "Erro ao carregar tarefas.");
-      }
-
-      if (rewardsResponse.ok) {
-        setRewards(rewardsData);
-      } else {
-        setErrorRewards(rewardsData?.message || "Erro ao carregar recompensas.");
-      }
-    } catch (error: any) {
-      console.error("Erro ao carregar dados:", error);
-      setErrorTasks("Erro de conexão ao carregar tarefas.");
-      setErrorRewards("Erro de conexão ao carregar recompensas.");
-    } finally {
-      setLoadingTasks(false);
-      setLoadingRewards(false);
-    }
-  };
+  }, [challenge?.id, fetchUserPointsData, API_BASE_URL]);
 
   useEffect(() => {
-    if (challenge?.id) {
-      loadData();
+    fetchUserPoints();
+  }, [fetchUserPoints]);
+
+  useEffect(() => {
+    if (fetchedPoints !== undefined) {
+      setUserPoints(fetchedPoints);
+    } else if (errorPoints) {
+      console.error('Erro ao buscar pontos do usuário:', errorPoints);
+      showSnackbar('Erro ao carregar seus pontos.', 'error');
+      setUserPoints(null);
     }
-  }, [challenge?.id]);
+  }, [fetchedPoints, errorPoints, showSnackbar]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await loadData();
-    setRefreshing(false);
-  };
+  const onRewardRescued = useCallback(() => {
+    fetchUserPoints();
+  }, [fetchUserPoints]);
 
-  const rescueTask = async (taskId: string) => {
-    const token = await SecureStore.getItemAsync("userToken");
-    if (!token) {
-      console.error("Usuário não autenticado.");
-      return;
-    }
-
-    setTasks(prevTasks =>
-      prevTasks.map(task =>
-        task.id === taskId ? { ...task, resgatada: true } : task
-      )
-    );
-
-    try {
-      const response = await fetch(
-        `http://10.0.2.2:3002/api/tarefas/${taskId}/concluir`, // Adapte sua rota da API
-        {
-          method: "PUT",
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setTasks(prevTasks =>
-          prevTasks.map(task =>
-            task.id === taskId ? { ...task, status: "CONCLUIDA", resgatada: false } : task
-          )
-        );
-        // Opcional: Recarregar os dados do usuário para atualizar os pontos
-      } else {
-        console.error("Erro ao resgatar tarefa:", data?.message || "Erro desconhecido");
-        setTasks(prevTasks =>
-          prevTasks.map(task =>
-            task.id === taskId ? { ...task, resgatada: false } : task
-          )
-        );
-        // Exibir uma mensagem de erro para o usuário
-      }
-    } catch (error: any) {
-      console.error("Erro ao conectar para resgatar tarefa:", error);
-      setTasks(prevTasks =>
-        prevTasks.map(task =>
-          task.id === taskId ? { ...task, resgatada: false } : task
-        )
-      );
-      // Exibir uma mensagem de erro de conexão para o usuário
-    }
-  };
-
-  const renderTaskCard = (task: Task) => (
-    <Card
-      key={task.id}
-      style={styles.itemCard}
-    >
-      <Card.Title
-        title={task.descricao}
-        left={(props) => (
-          <Avatar.Icon
-            {...props}
-            icon={task.status === "CONCLUIDA" ? "check-circle" : "circle-outline"}
-            style={{
-              backgroundColor:
-                task.status === "CONCLUIDA" ? colors.primary : colors.secondary
-            }}
-          />
-        )}
-        right={(props) => (
-          <View style={styles.cardRightContent}>
-            <Text {...props} style={{ color: colors.secondary, marginRight: 4 }}>
-              {task.pontos} pts
-            </Text>
-            {task.status === "PENDENTE" && (
-              task.resgatada ? (
-                <ActivityIndicator size="small" color={colors.primary} />
-              ) : (
-                <Button
-                  mode="contained"
-                  onPress={() => rescueTask(task.id)}
-                  style={styles.rescueButton}
-                >
-                  Resgatar
-                </Button>
-              )
-            )}
-            {task.status === "CONCLUIDA" && (
-              <Badge style={{ backgroundColor: colors.primary }}>
-                Concluída
-              </Badge>
-            )}
-          </View>
-        )}
-      />
-    </Card>
-  );
-
-  const renderRewardCard = (reward: Reward) => (
-    <Card
-      key={reward.id}
-      style={styles.itemCard}
-      onPress={() => {/* Optional: Navigate to reward details */}}
-    >
-      <Card.Title
-        title={reward.nome}
-        left={(props) => (
-          <Avatar.Icon
-            {...props}
-            icon="gift"
-            style={{ backgroundColor: colors.primary }}
-          />
-        )}
-        right={(props) => (
-          <Text {...props} style={{ color: colors.secondary }}>
-            {reward.custoPontos} pts
-          </Text>
-        )}
-      />
-    </Card>
-  );
 
   if (!challenge) {
     return (
@@ -238,121 +66,70 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        style={{ backgroundColor: colors.background }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={[colors.primary]}
+      <Surface style={styles.header} elevation={1}>
+        <View style={styles.headerContent}>
+          <Avatar.Icon
+            size={60}
+            icon="trophy"
+            style={{
+              backgroundColor:
+                challenge.status === "completed"
+                  ? colors.primary
+                  : challenge.status === "pending"
+                  ? colors.secondary
+                  : colors.primary,
+            }}
           />
-        }
-        contentContainerStyle={styles.scrollContent}
-      >
-        <Surface style={styles.header} elevation={1}>
-          <View style={styles.headerContent}>
-            <Avatar.Icon
-              size={60}
-              icon="trophy"
-              style={{
-                backgroundColor:
-                  challenge.status === 'completed' ? colors.primary :
-                  challenge.status === 'pending' ? colors.disabled :
-                  colors.accent
-              }}
-            />
-            <View>
-              <Text variant="headlineSmall">{challenge.nome}</Text>
+          <View>
+            <Text variant="headlineSmall">{challenge.nome}</Text>
+            <Text variant="bodyMedium" style={{ color: colors.secondary }}>
+              {challenge.descricao}
+            </Text>
+            {loadingPoints && (
               <Text variant="bodyMedium" style={{ color: colors.secondary }}>
-                {challenge.descricao}
+                Carregando seus pontos...
               </Text>
-            </View>
+            )}
+            {!loadingPoints && userPoints !== null && (
+              <Text variant="bodyMedium" style={{ color: colors.primary }}>
+                Seus pontos: {userPoints}
+              </Text>
+            )}
+            {!loadingPoints && userPoints === null && errorPoints && (
+              <Text variant="bodyMedium" style={{ color: colors.error }}>
+                Erro ao carregar pontos.
+              </Text>
+            )}
           </View>
-        </Surface>
-
-        <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Tarefas
-          </Text>
-
-          {loadingTasks ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : errorTasks ? (
-            <View style={styles.errorContainer}>
-              <Text style={{ color: colors.error }}>{errorTasks}</Text>
-              <Button mode="contained" onPress={loadData}>
-                Tentar Novamente
-              </Button>
-            </View>
-          ) : tasks.length > 0 ? (
-            <View style={styles.itemList}>
-              {tasks.map(renderTaskCard)}
-            </View>
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
-                Nenhuma tarefa criada ainda.
-              </Text>
-            </View>
-          )}
         </View>
+      </Surface>
 
-        <View style={styles.section}>
-          <Text variant="titleLarge" style={styles.sectionTitle}>
-            Recompensas
-          </Text>
-
-          {loadingRewards ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : errorRewards ? (
-            <View style={styles.errorContainer}>
-              <Text style={{ color: colors.error }}>{errorRewards}</Text>
-              <Button mode="contained" onPress={loadData}>
-                Tentar Novamente
-              </Button>
-            </View>
-          ) : rewards.length > 0 ? (
-            <View style={styles.itemList}>
-              {rewards.map(renderRewardCard)}
-            </View>
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <Text variant="bodyLarge" style={{ textAlign: 'center' }}>
-                Nenhuma recompensa criada ainda.
-              </Text>
-            </View>
+      <Tab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: colors.primary,
+          tabBarInactiveTintColor: colors.secondary,
+          tabBarIndicatorStyle: { backgroundColor: colors.primary },
+        }}
+      >
+        <Tab.Screen name="Tarefas">
+          {() => (
+            <TaskList
+              challenge={challenge}
+              showSnackbar={showSnackbar}
+              onRewardRescued={onRewardRescued} 
+            />
           )}
-        </View>
-      </ScrollView>
-
-      <View style={styles.bottomButtons}>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('CreateTask', {
-            challengeName: challenge.nome,
-            challengeId: challenge.id,
-          })}
-          style={styles.actionButton}
-          icon="plus"
-        >
-          Nova Tarefa
-        </Button>
-        <Button
-          mode="contained"
-          onPress={() => navigation.navigate('CreateReward', {
-            challengeName: challenge.nome,
-            challengeId: challenge.id,
-          })}
-          style={styles.actionButton}
-          icon="gift"
-        >
-          Nova Recompensa
-        </Button>
-      </View>
+        </Tab.Screen>
+        <Tab.Screen name="Recompensas">
+          {() => (
+            <RewardList
+              challenge={challenge}
+              showSnackbar={showSnackbar}
+              onRewardRescued={onRewardRescued} // Passamos a função (vazia por enquanto)
+            />
+          )}
+        </Tab.Screen>
+      </Tab.Navigator>
     </View>
   );
 };
@@ -361,70 +138,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    paddingBottom: 70,
-  },
   header: {
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 0,
   },
   headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 16,
   },
-  section: {
-    padding: 16,
-  },
-  sectionTitle: {
-    marginBottom: 16,
-  },
-  itemList: {
-    gap: 12,
-  },
-  itemCard: {
-    marginBottom: 12,
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
   errorContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    gap: 12,
-  },
-  emptyStateContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  bottomButtons: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'white',
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: 1,
-    borderTopColor: '#ccc',
-  },
-  actionButton: {
     flex: 1,
-    marginHorizontal: 8,
-    borderRadius: 8,
-  },
-  cardRightContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rescueButton: {
-    marginHorizontal: 4,
-    backgroundColor: '#6200ee', // Use a cor primária do seu tema
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
   },
 });
 

@@ -1,26 +1,26 @@
+import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button, Text, TextInput, useTheme, ActivityIndicator, Snackbar, Card } from "react-native-paper";
-import * as SecureStore from "expo-secure-store";
+import { Button, Card, Text, TextInput, useTheme } from "react-native-paper";
+import { useSnackbar } from "../context/SnackbarContext"; // Ajuste o caminho conforme sua estrutura de pastas
 
 const CreateChallengeScreen = ({ navigation }: any) => {
   const [nome, setNome] = useState("");
   const [descricao, setDescricao] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const { colors } = useTheme();
-  const [snackbarVisible, setSnackbarVisible] = useState(false);
-  const [snackbarMessage, setSnackbarMessage] = useState("");
 
-  const showSnackbar = (message: string) => {
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
-  };
+  // Usando o hook do contexto de Snackbar
+  const { showSnackbar } = useSnackbar();
 
-  const onDismissSnackbar = () => setSnackbarVisible(false);
+  // Separate validation state
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
 
   const handleCreateChallenge = async () => {
+    // Check form validity
     if (!nome || !descricao) {
-      showSnackbar("Preencha todos os campos");
+      setShowValidationErrors(true);
+      showSnackbar("Preencha todos os campos", "error");
       return;
     }
 
@@ -28,7 +28,8 @@ const CreateChallengeScreen = ({ navigation }: any) => {
     try {
       const token = await SecureStore.getItemAsync("userToken");
       if (!token) {
-        showSnackbar("Usuário não autenticado");
+        showSnackbar("Usuário não autenticado", "error");
+        setIsCreating(false);
         return;
       }
 
@@ -42,19 +43,31 @@ const CreateChallengeScreen = ({ navigation }: any) => {
       });
 
       setIsCreating(false);
+
       if (response.ok) {
-        showSnackbar("Desafio criado com sucesso!");
+        // On success, clear validation errors
+        setShowValidationErrors(false);
+        showSnackbar("Desafio criado com sucesso!", "success");
+
+        // Clear the form
         setNome("");
         setDescricao("");
-        navigation.goBack(); // Voltar para a tela anterior após a criação
+
+        // Navigate after a short delay without showing validation errors
+        navigation.navigate("Home");
       } else {
         const errorData = await response.json();
-        showSnackbar(`Falha ao criar desafio: ${errorData?.message || 'Erro desconhecido'}`);
+        showSnackbar(
+          `Falha ao criar desafio: ${
+            errorData?.message || "Erro desconhecido"
+          }`,
+          "error"
+        );
       }
     } catch (error) {
       console.error(error);
       setIsCreating(false);
-      showSnackbar("Erro na comunicação com o servidor");
+      showSnackbar("Erro na comunicação com o servidor", "error");
     }
   };
 
@@ -69,18 +82,27 @@ const CreateChallengeScreen = ({ navigation }: any) => {
           <TextInput
             label="Nome do Desafio"
             value={nome}
-            onChangeText={setNome}
+            onChangeText={(text) => {
+              setNome(text);
+              if (text) setShowValidationErrors(false);
+            }}
             style={styles.input}
             mode="outlined"
+            error={showValidationErrors && !nome}
           />
 
           <TextInput
             label="Descrição do Desafio"
             value={descricao}
-            onChangeText={setDescricao}
+            onChangeText={(text) => {
+              setDescricao(text);
+              if (text) setShowValidationErrors(false);
+            }}
             style={styles.input}
             multiline
+            numberOfLines={4}
             mode="outlined"
+            error={showValidationErrors && !descricao}
           />
 
           <Button
@@ -94,14 +116,6 @@ const CreateChallengeScreen = ({ navigation }: any) => {
           </Button>
         </Card.Content>
       </Card>
-
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={onDismissSnackbar}
-        duration={Snackbar.DURATION_SHORT}
-      >
-        {snackbarMessage}
-      </Snackbar>
     </View>
   );
 };
@@ -109,19 +123,19 @@ const CreateChallengeScreen = ({ navigation }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     padding: 20,
-    backgroundColor: '#f4f4f4',
+    backgroundColor: "#f4f4f4",
   },
   card: {
-    width: '100%',
+    width: "100%",
     padding: 20,
   },
   title: {
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginBottom: 16,
-    textAlign: 'center',
+    textAlign: "center",
   },
   input: {
     marginBottom: 16,

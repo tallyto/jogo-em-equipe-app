@@ -1,7 +1,8 @@
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, View, Alert } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Text, TextInput, Button, Card, ActivityIndicator } from 'react-native-paper';
 import * as SecureStore from 'expo-secure-store';
+import { useSnackbar } from '../context/SnackbarContext'; // Importe o hook do contexto
 
 interface CreateTaskScreenProps {
   route: any;
@@ -10,6 +11,7 @@ interface CreateTaskScreenProps {
 
 const CreateTaskScreen: React.FC<CreateTaskScreenProps> = ({ route, navigation }) => {
   const { challengeId, challengeName } = route.params;
+  const { showSnackbar } = useSnackbar(); // Utilize o hook para acessar showSnackbar
   const [taskName, setTaskName] = useState('');
   const [taskPoints, setTaskPoints] = useState<string>('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +49,7 @@ const CreateTaskScreen: React.FC<CreateTaskScreenProps> = ({ route, navigation }
 
     const token = await SecureStore.getItemAsync('userToken');
     if (!token) {
-      Alert.alert('Não autenticado');
+      showSnackbar('Não autenticado', 'error'); // Use o snackbar global
       return;
     }
 
@@ -64,21 +66,21 @@ const CreateTaskScreen: React.FC<CreateTaskScreenProps> = ({ route, navigation }
       });
 
       if (response.ok) {
-        Alert.alert('Tarefa criada!');
+        showSnackbar('Tarefa criada com sucesso!', 'success'); // Use o snackbar global
         setTaskName('');
         setTaskPoints('');
         navigation.goBack();
       } else {
         const errorData = await response.json();
-        Alert.alert('Erro ao criar tarefa', errorData?.message || 'Verifique os dados e tente novamente.');
+        showSnackbar('Erro ao criar tarefa: ' + (errorData?.message || 'Verifique os dados e tente novamente.'), 'error'); // Use o snackbar global
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar tarefa:', error);
-      Alert.alert('Erro de conexão');
+      showSnackbar('Erro de conexão ao criar tarefa.', 'error'); // Use o snackbar global
     } finally {
       setLoading(false);
     }
-  }, [challengeId, navigation, taskName, taskPoints, validateInputs]);
+  }, [challengeId, navigation, taskName, taskPoints, validateInputs, showSnackbar]);
 
   return (
     <View style={styles.container}>

@@ -13,15 +13,13 @@ const SignUpScreen = ({ navigation }: any) => {
       const response = await fetch('http://10.0.2.2:3002/api/v1/auth/register', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json', 
+          'Accept': 'application/json',   
         },
         body: JSON.stringify({ email, name, password }),
       });
 
       if (response.ok) {
-        const data = await response.json();
-        console.log(data);
-        
         // Navega para a tela de login após registro bem-sucedido
         Alert.alert('Cadastro realizado com sucesso', 'Você pode agora fazer o login!');
         navigation.replace('Login');
