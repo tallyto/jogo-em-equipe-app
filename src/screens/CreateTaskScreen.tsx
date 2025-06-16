@@ -1,8 +1,8 @@
-import React, { useState, useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Text, TextInput, Button, Card, ActivityIndicator } from 'react-native-paper';
-import * as SecureStore from 'expo-secure-store';
+import { ActivityIndicator, Button, Card, Text, TextInput } from 'react-native-paper';
 import { useSnackbar } from '../context/SnackbarContext'; // Importe o hook do contexto
+import { createTask } from '../services/desafioService';
 
 interface CreateTaskScreenProps {
   route: any;
@@ -46,37 +46,21 @@ const CreateTaskScreen: React.FC<CreateTaskScreenProps> = ({ route, navigation }
     if (!validateInputs()) {
       return;
     }
-
-    const token = await SecureStore.getItemAsync('userToken');
-    if (!token) {
-      showSnackbar('Não autenticado', 'error'); // Use o snackbar global
-      return;
-    }
-
     setLoading(true);
-
     try {
-      const response = await fetch(`http://10.0.2.2:3002/api/desafios/${challengeId}/tarefas`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ descricao: taskName, pontos: parseInt(taskPoints, 10) }),
-      });
-
+      const response = await createTask(challengeId, taskName, parseInt(taskPoints, 10));
       if (response.ok) {
-        showSnackbar('Tarefa criada com sucesso!', 'success'); // Use o snackbar global
+        showSnackbar('Tarefa criada com sucesso!', 'success');
         setTaskName('');
         setTaskPoints('');
         navigation.goBack();
       } else {
         const errorData = await response.json();
-        showSnackbar('Erro ao criar tarefa: ' + (errorData?.message || 'Verifique os dados e tente novamente.'), 'error'); // Use o snackbar global
+        showSnackbar('Erro ao criar tarefa: ' + (errorData?.message || 'Verifique os dados e tente novamente.'), 'error');
       }
     } catch (error: any) {
       console.error('Erro ao criar tarefa:', error);
-      showSnackbar('Erro de conexão ao criar tarefa.', 'error'); // Use o snackbar global
+      showSnackbar('Erro de conexão ao criar tarefa.', 'error');
     } finally {
       setLoading(false);
     }

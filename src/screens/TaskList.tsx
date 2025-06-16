@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -13,6 +13,7 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useFetchData from "../hooks/useFetchData";
+import { concludeTask, getTasks } from "../services/desafioService";
 
 interface TaskListProps {
   challenge: any;
@@ -46,8 +47,21 @@ const TaskList: React.FC<TaskListProps> = ({
   } = useFetchData<Task[]>();
 
   const loadTasks = useCallback(async () => {
-    fetchData(`http://10.0.2.2:3002/api/desafios/${challenge.id}/tarefas`);
-  }, [challenge?.id, fetchData]);
+    try {
+      const response = await getTasks(challenge.id);
+      if (response.ok) {
+        const data = await response.json();
+        console.log("Tasks fetched:", data);
+        setTasks(data);
+      } else {
+        setTasks([]);
+        showSnackbar("Erro ao carregar tarefas.", "error");
+      }
+    } catch (error) {
+      setTasks([]);
+      showSnackbar("Erro de conexão ao carregar tarefas.", "error");
+    }
+  }, [challenge?.id, showSnackbar]);
 
   useFocusEffect(
     useCallback(() => {
@@ -80,36 +94,41 @@ const TaskList: React.FC<TaskListProps> = ({
         )
       );
 
-      const success = await fetchData(
-        `http://10.0.2.2:3002/api/tarefas/${taskId}/concluir`,
-        "PUT"
-      );
-
-      if (success) {
-        setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task.id === taskId
-              ? { ...task, status: "CONCLUIDA", resgatada: false }
-              : task
-          )
-        );
-        showSnackbar("Tarefa concluída com sucesso!", "success");
-        loadTasks(); // <---- RECARREGAR A LISTA AQUI
-        onRewardRescued();
-      } else {
+      try {
+        const response = await concludeTask(taskId);
+        if (response.ok) {
+          setTasks((prevTasks) =>
+            prevTasks.map((task) =>
+              task.id === taskId
+                ? { ...task, status: "CONCLUIDA", resgatada: false }
+                : task
+            )
+          );
+          showSnackbar("Tarefa concluída com sucesso!", "success");
+          loadTasks();
+          onRewardRescued();
+        } else {
+          setTasks((prevTasks) =>
+            prevTasks.map((task) =>
+              task.id === taskId ? { ...task, resgatada: false } : task
+            )
+          );
+          showSnackbar("Erro ao resgatar tarefa.", "error");
+        }
+      } catch (error) {
         setTasks((prevTasks) =>
           prevTasks.map((task) =>
             task.id === taskId ? { ...task, resgatada: false } : task
           )
         );
-        showSnackbar(errorTasks || "Erro ao resgatar tarefa.", "error");
+        showSnackbar("Erro de conexão ao concluir tarefa.", "error");
       }
     },
-    [fetchData, showSnackbar, errorTasks, loadTasks, onRewardRescued] // Adicione loadTasks como dependência
+    [loadTasks, onRewardRescued, showSnackbar]
   );
 
   const renderTaskCard = useCallback(
-    (task: Task) => (
+    (task: Task & { usuarioCriador?: any; usuarioConcluidor?: any }) => (
       <Card key={task.id} style={styles.itemCard}>
         <Card.Title
           title={task.descricao}
@@ -160,6 +179,22 @@ const TaskList: React.FC<TaskListProps> = ({
             </View>
           )}
         />
+        <Card.Content>
+          <Text style={{ color: "#888", fontSize: 13 }}>
+            Criada por:{" "}
+            {task.usuarioCriador?.name ||
+              task.usuarioCriador?.nome ||
+              "Desconhecido"}
+          </Text>
+          {task.usuarioConcluidor && (
+            <Text style={{ color: "#888", fontSize: 13 }}>
+              Concluída por:{" "}
+              {task.usuarioConcluidor?.name ||
+                task.usuarioConcluidor?.nome ||
+                "Desconhecido"}
+            </Text>
+          )}
+        </Card.Content>
       </Card>
     ),
     [colors.primary, colors.secondary, rescueTask]

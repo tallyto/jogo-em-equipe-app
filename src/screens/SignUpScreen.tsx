@@ -1,7 +1,7 @@
-// src/screens/SignUpScreen.tsx
 import React, { useState } from 'react';
-import { StyleSheet, View, Alert } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
+import { Alert, StyleSheet, View } from 'react-native';
+import { Button, Text, TextInput } from 'react-native-paper';
+import { fetchWithTimeout, getApiBaseUrl } from '../services/api';
 
 const SignUpScreen = ({ navigation }: any) => {
   const [email, setEmail] = useState('');
@@ -9,15 +9,16 @@ const SignUpScreen = ({ navigation }: any) => {
   const [password, setPassword] = useState('');
 
   const handleRegister = async () => {
+    const apiBaseUrl = getApiBaseUrl();
     try {
-      const response = await fetch('http://10.0.2.2:3002/api/v1/auth/register', {
+      const response = await fetchWithTimeout(`${apiBaseUrl}/api/v1/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json', 
           'Accept': 'application/json',   
         },
         body: JSON.stringify({ email, name, password }),
-      });
+      }, 3000);
 
       if (response.ok) {
         // Navega para a tela de login após registro bem-sucedido
@@ -26,9 +27,12 @@ const SignUpScreen = ({ navigation }: any) => {
       } else {
         Alert.alert('Erro no cadastro', 'Verifique seus dados e tente novamente');
       }
-    } catch (error) {
+    } catch (error: any) {
+      const msg = error?.message?.includes('timeout')
+        ? 'Tempo de requisição excedido. Tente novamente.'
+        : 'Erro na comunicação com o servidor!';
       console.error(error);
-      Alert.alert('Erro na comunicação com o servidor!');
+      Alert.alert('Erro', msg);
     }
   };
 

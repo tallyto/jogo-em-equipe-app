@@ -1,11 +1,12 @@
 import { createMaterialTopTabNavigator } from "@react-navigation/material-top-tabs";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Avatar, Surface, Text, useTheme } from "react-native-paper";
 import { useSnackbar } from "../context/SnackbarContext";
-import TaskList from "./TaskList";
+import { getUserPoints } from '../services/desafioService';
+import ParticipantsTab from "./ParticipantsTab";
 import RewardList from "./RewardList";
-import useFetchData from "../hooks/useFetchData"; // Certifique-se que o caminho está correto
+import TaskList from "./TaskList";
 
 interface ChallengeDetailsScreenProps {
   route: any;
@@ -22,34 +23,28 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
   const { colors } = useTheme();
   const { showSnackbar } = useSnackbar();
   const [userPoints, setUserPoints] = useState<number | null>(null);
-  const API_BASE_URL = 'http://10.0.2.2:3002'; // Substitua pelo seu IP e porta
-
-  const {
-    data: fetchedPoints,
-    loading: loadingPoints,
-    error: errorPoints,
-    fetchData: fetchUserPointsData,
-  } = useFetchData<number>();
 
   const fetchUserPoints = useCallback(async () => {
     if (challenge?.id) {
-      fetchUserPointsData(`${API_BASE_URL}/api/pontos-usuario/${challenge.id}`);
+      try {
+        const response = await getUserPoints(challenge.id);
+        if (response.ok) {
+          const data = await response.json();
+          setUserPoints(data);
+        } else {
+          throw new Error('Erro ao carregar pontos do usuário');
+        }
+      } catch (error) {
+        console.error('Erro ao buscar pontos do usuário:', error);
+        showSnackbar('Erro ao carregar seus pontos.', 'error');
+        setUserPoints(null);
+      }
     }
-  }, [challenge?.id, fetchUserPointsData, API_BASE_URL]);
+  }, [challenge?.id, showSnackbar]);
 
   useEffect(() => {
     fetchUserPoints();
   }, [fetchUserPoints]);
-
-  useEffect(() => {
-    if (fetchedPoints !== undefined) {
-      setUserPoints(fetchedPoints);
-    } else if (errorPoints) {
-      console.error('Erro ao buscar pontos do usuário:', errorPoints);
-      showSnackbar('Erro ao carregar seus pontos.', 'error');
-      setUserPoints(null);
-    }
-  }, [fetchedPoints, errorPoints, showSnackbar]);
 
   const onRewardRescued = useCallback(() => {
     fetchUserPoints();
@@ -85,17 +80,17 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <Text variant="bodyMedium" style={{ color: colors.secondary }}>
               {challenge.descricao}
             </Text>
-            {loadingPoints && (
+            {userPoints === null && (
               <Text variant="bodyMedium" style={{ color: colors.secondary }}>
                 Carregando seus pontos...
               </Text>
             )}
-            {!loadingPoints && userPoints !== null && (
+            {userPoints !== null && (
               <Text variant="bodyMedium" style={{ color: colors.primary }}>
                 Seus pontos: {userPoints}
               </Text>
             )}
-            {!loadingPoints && userPoints === null && errorPoints && (
+            {userPoints === null && (
               <Text variant="bodyMedium" style={{ color: colors.error }}>
                 Erro ao carregar pontos.
               </Text>
@@ -116,7 +111,7 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <TaskList
               challenge={challenge}
               showSnackbar={showSnackbar}
-              onRewardRescued={onRewardRescued} 
+              onRewardRescued={onRewardRescued}
             />
           )}
         </Tab.Screen>
@@ -125,9 +120,12 @@ const ChallengeDetailsScreen: React.FC<ChallengeDetailsScreenProps> = ({
             <RewardList
               challenge={challenge}
               showSnackbar={showSnackbar}
-              onRewardRescued={onRewardRescued} // Passamos a função (vazia por enquanto)
+              onRewardRescued={onRewardRescued}
             />
           )}
+        </Tab.Screen>
+        <Tab.Screen name="Participantes">
+          {() => <ParticipantsTab challengeId={challenge.id} />}
         </Tab.Screen>
       </Tab.Navigator>
     </View>

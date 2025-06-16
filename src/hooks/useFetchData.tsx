@@ -1,11 +1,13 @@
-import { useCallback, useState } from "react";
 import * as SecureStore from "expo-secure-store";
+import { useCallback, useState } from "react";
 
 interface FetchState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
 }
+
+const FETCH_TIMEOUT = 3000; // 3 segundos
 
 function useFetchData<T = any>() {
   const [state, setState] = useState<FetchState<T>>({
@@ -40,8 +42,18 @@ function useFetchData<T = any>() {
         config.body = JSON.stringify(body);
       }
 
+      // Implementação do timeout
+      const fetchWithTimeout = (resource: string, options: RequestInit) => {
+        return Promise.race([
+          fetch(resource, options),
+          new Promise<Response>((_, reject) =>
+            setTimeout(() => reject(new Error("Tempo de requisição excedido (timeout).")), FETCH_TIMEOUT)
+          ),
+        ]);
+      };
+
       try {
-        const response = await fetch(url, config);
+        const response = await fetchWithTimeout(url, config) as Response;
 
         if (!response.ok) {
           const errorData = await response.json();

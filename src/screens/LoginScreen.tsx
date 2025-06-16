@@ -1,9 +1,10 @@
-import React, { useState, useContext, useCallback } from 'react';
-import { StyleSheet, View, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
-import { TextInput, Button, Text, HelperText } from 'react-native-paper';
-import { AuthContext } from '../context/AuthContext';
-import { useSnackbar } from '../context/SnackbarContext'; // Importe o hook do contexto
+import React, { useCallback, useContext, useState } from 'react';
+import { KeyboardAvoidingView, Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { Button, HelperText, Text, TextInput } from 'react-native-paper';
 import * as yup from 'yup';
+import { AuthContext } from '../context/AuthContext';
+import { useSnackbar } from '../context/SnackbarContext';
+import { loginService } from '../services/loginService';
 
 // Validation schema
 const loginSchema = yup.object().shape({
@@ -19,7 +20,7 @@ const loginSchema = yup.object().shape({
 
 const LoginScreen = ({ navigation }: any) => {
   const { login } = useContext(AuthContext);
-  const { showSnackbar } = useSnackbar(); // Utilize o hook para acessar showSnackbar
+  const { showSnackbar } = useSnackbar(); 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
@@ -52,13 +53,7 @@ const LoginScreen = ({ navigation }: any) => {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://10.0.2.2:3002/api/v1/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+      const response = await loginService(email, password);
 
       if (response.ok) {
         const data = await response.json();
@@ -68,8 +63,10 @@ const LoginScreen = ({ navigation }: any) => {
         throw new Error(errorData.message || 'Credenciais inválidas');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro na comunicação com o servidor!';
-      showSnackbar(errorMessage, 'error'); // Use o snackbar global
+      const errorMessage = error instanceof Error && error.message.includes('timeout')
+        ? 'Tempo de requisição excedido. Tente novamente.'
+        : (error instanceof Error ? error.message : 'Erro na comunicação com o servidor!');
+      showSnackbar(errorMessage, 'error'); 
     } finally {
       setIsLoading(false);
     }

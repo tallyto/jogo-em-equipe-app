@@ -1,9 +1,9 @@
-import React, { useContext, useState, useCallback } from 'react';
-import { StyleSheet, View, RefreshControl, ScrollView } from 'react-native';
-import { Button, Text, useTheme, Card, Surface, Avatar, Badge } from 'react-native-paper';
-import { AuthContext } from '../context/AuthContext';
-import * as SecureStore from 'expo-secure-store';
 import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useContext, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Avatar, Badge, Button, Card, Surface, Text, useTheme } from 'react-native-paper';
+import { AuthContext } from '../context/AuthContext';
+import { getActiveChallenges } from '../services/desafioService';
 
 interface HomeScreenProps {
   navigation: any;
@@ -31,17 +31,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ navigation }) => {
     setErrorChallenges(null);
 
     try {
-      const token = await SecureStore.getItemAsync('userToken');
-      if (!token) {
-        throw new Error('Usuário não autenticado');
-      }
-
-      const response = await fetch('http://10.0.2.2:3002/api/desafios', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
+      const response = await getActiveChallenges();
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData?.message || 'Erro ao carregar desafios ativos');

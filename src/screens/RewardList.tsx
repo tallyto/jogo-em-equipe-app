@@ -1,5 +1,5 @@
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   ActivityIndicator,
@@ -13,11 +13,12 @@ import {
 } from "react-native-paper";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import useFetchData from "../hooks/useFetchData";
+import { getRewards, rescueReward } from "../services/desafioService";
 
 interface RewardListProps {
   challenge: any;
   showSnackbar: (message: string, type: "success" | "error") => void;
-  onRewardRescued: () => void; // Recebe a função de callback
+  onRewardRescued: () => void;
 }
 
 interface Reward {
@@ -30,7 +31,7 @@ interface Reward {
 const RewardList: React.FC<RewardListProps> = ({
   challenge,
   showSnackbar,
-  onRewardRescued, // Recebe a função de callback
+  onRewardRescued,
 }) => {
   const { colors } = useTheme();
   const [rewards, setRewards] = useState<Reward[]>([]);
@@ -45,8 +46,20 @@ const RewardList: React.FC<RewardListProps> = ({
   } = useFetchData<Reward[]>();
 
   const loadRewards = useCallback(async () => {
-    fetchData(`http://10.0.2.2:3002/api/recompensas/${challenge.id}`);
-  }, [challenge?.id, fetchData]);
+    try {
+      const response = await getRewards(challenge.id);
+      if (response.ok) {
+        const data = await response.json();
+        setRewards(data);
+      } else {
+        setRewards([]);
+        showSnackbar("Erro ao carregar recompensas.", "error");
+      }
+    } catch (error) {
+      setRewards([]);
+      showSnackbar("Erro de conexão ao carregar recompensas.", "error");
+    }
+  }, [challenge?.id, showSnackbar]);
 
   useFocusEffect(
     useCallback(() => {
@@ -71,41 +84,42 @@ const RewardList: React.FC<RewardListProps> = ({
     setRefreshing(false);
   }, [loadRewards]);
 
-  const rescueReward = useCallback(
+  const rescueRewardHandler = useCallback(
     async (rewardId: string) => {
       setRewards((prevRewards) =>
         prevRewards.map((reward) =>
           reward.id === rewardId ? { ...reward, resgatada: true } : reward
         )
       );
-
-      const success = await fetchData(
-        `http://10.0.2.2:3002/api/recompensas/${rewardId}/resgatar`,
-        "PUT"
-      );
-
-      if (success) {
-        setRewards((prevRewards) =>
-          prevRewards.map((reward) =>
-            reward.id === rewardId ? { ...reward, resgatada: true } : reward
-          )
-        );
-        showSnackbar("Recompensa resgatada com sucesso!", "success");
-        loadRewards(); // <---- RECARREGAR A LISTA AQUI
-        onRewardRescued();
-      } else {
-        showSnackbar(
-          errorRewards || "Não foi possível resgatar a recompensa.",
-          "error"
-        );
+      try {
+        const response = await rescueReward(rewardId);
+        if (response.ok) {
+          setRewards((prevRewards) =>
+            prevRewards.map((reward) =>
+              reward.id === rewardId ? { ...reward, resgatada: true } : reward
+            )
+          );
+          showSnackbar("Recompensa resgatada com sucesso!", "success");
+          loadRewards();
+          onRewardRescued();
+        } else {
+          setRewards((prevRewards) =>
+            prevRewards.map((reward) =>
+              reward.id === rewardId ? { ...reward, resgatada: false } : reward
+            )
+          );
+          showSnackbar("Não foi possível resgatar a recompensa.", "error");
+        }
+      } catch (error) {
         setRewards((prevRewards) =>
           prevRewards.map((reward) =>
             reward.id === rewardId ? { ...reward, resgatada: false } : reward
           )
         );
+        showSnackbar("Erro de conexão ao resgatar recompensa.", "error");
       }
     },
-    [fetchData, showSnackbar, errorRewards, loadRewards, onRewardRescued] // Adicione loadRewards como dependência
+    [loadRewards, onRewardRescued, showSnackbar]
   );
 
   const renderRewardCard = useCallback(
@@ -133,7 +147,7 @@ const RewardList: React.FC<RewardListProps> = ({
               ) : (
                 <Button
                   mode="contained"
-                  onPress={() => rescueReward(reward.id)}
+                  onPress={() => rescueRewardHandler(reward.id)}
                   style={styles.rescueButton}
                   loading={reward.resgatada}
                   disabled={reward.resgatada}
@@ -147,7 +161,7 @@ const RewardList: React.FC<RewardListProps> = ({
         />
       </Card>
     ),
-    [colors.primary, colors.secondary, rescueReward]
+    [colors.primary, colors.secondary, rescueRewardHandler]
   );
 
   return (

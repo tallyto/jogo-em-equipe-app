@@ -1,4 +1,3 @@
-import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import {
@@ -10,6 +9,7 @@ import {
   useTheme,
 } from "react-native-paper";
 import { useSnackbar } from "../context/SnackbarContext"; // Importe o hook do contexto
+import { createReward } from '../services/desafioService';
 
 interface CreateRewardScreenProps {
   route: any;
@@ -55,37 +55,18 @@ const CreateRewardScreen: React.FC<CreateRewardScreenProps> = ({ route, navigati
 
     setLoading(true);
 
-    const token = await SecureStore.getItemAsync("userToken");
-    if (!token) {
-      showSnackbar("Não autenticado", "error"); // Use o snackbar global
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(`http://10.0.2.2:3002/api/recompensas`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          nome,
-          custoPontos: parseInt(custoPontos, 10),
-          desafioId: challengeId,
-        }),
-      });
-
+      const response = await createReward(nome, parseInt(custoPontos, 10), challengeId);
       if (response.ok) {
-        showSnackbar("Recompensa criada com sucesso!", "success"); // Use o snackbar global
+        showSnackbar("Recompensa criada com sucesso!", "success");
         navigation.goBack();
       } else {
         const errorData = await response.json();
-        showSnackbar(`Erro ao criar recompensa: ${errorData?.message || "Verifique os dados."}`, "error"); // Use o snackbar global
+        showSnackbar(`Erro ao criar recompensa: ${errorData?.message || "Verifique os dados."}`, "error");
       }
     } catch (error: any) {
       console.error("Erro ao criar recompensa:", error);
-      showSnackbar("Erro de conexão ao criar recompensa.", "error"); // Use o snackbar global
+      showSnackbar("Erro de conexão ao criar recompensa.", "error");
     } finally {
       setLoading(false);
     }

@@ -1,8 +1,8 @@
-import * as SecureStore from "expo-secure-store";
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Button, Card, Text, TextInput, useTheme } from "react-native-paper";
 import { useSnackbar } from "../context/SnackbarContext"; // Ajuste o caminho conforme sua estrutura de pastas
+import { createChallenge } from "../services/desafioService";
 
 const CreateChallengeScreen = ({ navigation }: any) => {
   const [nome, setNome] = useState("");
@@ -26,22 +26,7 @@ const CreateChallengeScreen = ({ navigation }: any) => {
 
     setIsCreating(true);
     try {
-      const token = await SecureStore.getItemAsync("userToken");
-      if (!token) {
-        showSnackbar("Usuário não autenticado", "error");
-        setIsCreating(false);
-        return;
-      }
-
-      const response = await fetch("http://10.0.2.2:3002/api/desafios", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ nome, descricao }),
-      });
-
+      const response = await createChallenge(nome, descricao);
       setIsCreating(false);
 
       if (response.ok) {
